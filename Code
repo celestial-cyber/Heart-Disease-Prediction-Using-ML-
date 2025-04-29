@@ -1,0 +1,103 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from feature_engine.outliers import Winsorizer
+import sklearn
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+import streamlit as st
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+
+# Load dataset
+hdf = pd.read_csv("C:\\ML Projects\\heart.csv")
+
+# Data exploration
+hdf['sex'].value_counts()
+hdf['cp'].value_counts()
+hdf['age'].value_counts()
+hdf['target'].value_counts()
+
+# Checking dataset properties
+  
+
+# Handling missing values
+hdf['age'].fillna(hdf['age'].median(), inplace=True)
+hdf['cp'].fillna(hdf['cp'].mode()[0], inplace=True)
+
+# Winsorization for outlier handling
+win = Winsorizer(capping_method='iqr', tail='both', fold=1.5, variables=['trestbps'])
+hdf['trestbps'] = win.fit_transform(hdf[['trestbps']])
+
+win = Winsorizer(capping_method='iqr', tail='both', fold=1.5, variables=['chol', 'thalach', 'oldpeak'])
+hdf[['chol', 'thalach', 'oldpeak']] = win.fit_transform(hdf[['chol', 'thalach', 'oldpeak']])
+
+# Feature engineering
+hdf['age-2'] = hdf['age']**2
+hdf['age-3'] = hdf['age']**3
+hdf.drop(columns=['age', 'age-3'], inplace=True)
+
+# Splitting dataset
+x = hdf.drop(['target'], axis=1)
+y = hdf['target']
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=50)
+
+# Streamlit web app
+st.title("Heart Disease Prediction")
+
+# Upload dataset
+uploaded_file = st.file_uploader("Upload heart disease dataset", type=["csv"])
+
+if uploaded_file is not None:
+    hdf = pd.read_csv(uploaded_file)
+
+# Model training
+dt = DecisionTreeClassifier()
+dt.fit(x_train, y_train)
+
+ypred_train = dt.predict(x_train)
+ypred_test = dt.predict(x_test)
+
+rf = RandomForestClassifier()
+rf.fit(x_train, y_train)
+
+train_accuracy = accuracy_score(y_train, ypred_train)
+test_accuracy = accuracy_score(y_test, ypred_test)
+
+# Sidebar for user inputs
+st.sidebar.header("Enter Patient Details")
+
+age = st.sidebar.number_input("Age", min_value=20, max_value=100, value=50)
+sex = st.sidebar.selectbox("Sex (0 = Female, 1 = Male)", [0, 1])
+cp = st.sidebar.selectbox("Chest Pain Type (0-3)", [0, 1, 2, 3])
+trestbps = st.sidebar.number_input("Resting Blood Pressure", min_value=90, max_value=200, value=120)
+chol = st.sidebar.number_input("Cholesterol", min_value=100, max_value=600, value=200)
+fbs = st.sidebar.selectbox("Fasting Blood Sugar > 120 mg/dl (1 = Yes, 0 = No)", [0, 1])
+restecg = st.sidebar.selectbox("Resting Electrocardiographic Results (0-2)", [0, 1, 2])
+thalach = st.sidebar.number_input("Maximum Heart Rate Achieved", min_value=60, max_value=220, value=150)
+exang = st.sidebar.selectbox("Exercise Induced Angina (1 = Yes, 0 = No)", [0, 1])
+oldpeak = st.sidebar.number_input("ST Depression", min_value=0.0, max_value=10.0, value=1.0)
+slope = st.sidebar.selectbox("Slope of Peak Exercise (0-2)", [0, 1, 2])
+ca = st.sidebar.number_input("Number of Major Vessels (0-4)", min_value=0, max_value=4, value=0)
+thal = st.sidebar.selectbox("Thalassemia (0-3)", [0, 1, 2, 3])
+
+# Make prediction
+if st.sidebar.button("Predict"):
+    sample_input = np.array([[age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal]])
+    prediction = dt.predict(sample_input)
+
+    if prediction[0] == 1:
+        st.sidebar.success("The model predicts: *Heart Disease*.")
+    else:
+        st.sidebar.success("The model predicts: *No Heart Disease*.")
+
+# Display metrics
+st.subheader("Model Performance")
+st.write(f"*Training Accuracy:* {train_accuracy:.2f}")
+st.write(f"*Test Accuracy:* {test_accuracy:.2f}")
+
+st.subheader("Classification Report")
+st.text(confusion_matrix(y_test, ypred_test))
